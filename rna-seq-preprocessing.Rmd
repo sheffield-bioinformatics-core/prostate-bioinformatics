@@ -287,7 +287,7 @@ write.table(sampleinfo_corrected, file="meta_data/sampleInfo_corrected.txt",sep=
 The `plotPCA` function produces a `ggplot2` plot (rather than "base" graphics) and we can also get the function to return the data used to create the plot by changing the `returnData` argument.
 
 ```{r}
-plot_data <- plotPCA(vsd,intgroup=c("CellType","Status"),returnData=TRUE)
+plot_data <- plotPCA(vsd,intgroup="Status",returnData=TRUE)
 plot_data <- bind_cols(plot_data,sampleinfo_corrected)
 ```
 
@@ -295,13 +295,13 @@ With `ggplot2` plot can be created by mapping various *aesthetics* of the plot (
 
 ```{r}
 library(ggplot2)
-ggplot(plot_data, aes(x = PC1,y=PC2, col=CellType)) + geom_point()
+ggplot(plot_data, aes(x = PC1,y=PC2, col=Status)) + geom_point()
 ```
 
 Having the data in this form allows us to customise the plot in lots of ways
 
 ```{r}
-ggplot(plot_data, aes(x = PC1,y=PC2, col=CellType,pch=Status)) + geom_point(size=5)
+ggplot(plot_data, aes(x = PC1,y=PC2, col=Status,pch=gleason_score)) + geom_point(size=5)
 
 ```
 
