@@ -1,0 +1,243 @@
+---
+title: "RNA-seq analysis in R"
+subtitle: "Differential Expression of RNA-seq data"
+author: "Mark Dunning"
+date: '`r format(Sys.time(), "Last modified: %d %b %Y")`'
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+minutes: 300
+layout: page
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Original Authors: Belinda Phipson, Anna Trigos, Matt Ritchie, Maria Doyle, Harriet Dashnow, Charity Law**, **Stephane Ballereau, Oscar Rueda, Ashley Sawle**
+Based on the course [RNAseq analysis in R](http://combine-australia.github.io/2016-05-11-RNAseq/) delivered on May 11/12th 2016 and modified by Cancer Research Uk Cambridge Centre for the [Functional Genomics Autumn School 2017](https://bioinformatics-core-shared-training.github.io/cruk-autumn-school-2017/)
+
+## Resources and data files
+
+This material has been created using the following resources:  
+
+
+- http://monashbioinformaticsplatform.github.io/RNAseq-DE-analysis-with-R/99-RNAseq_DE_analysis_with_R.html  
+- http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+- https://bioconductor.github.io/BiocWorkshops/rna-seq-data-analysis-with-deseq2.html
+
+
+
+## Differential expression with `DESeq2`
+
+Now that we are happy that we have normalised the data and that the quality looks good, we can continue to testing for differentially expressed genes. There are a number of packages to analyse RNA-Seq data. Most people use `DESeq2` or `edgeR`. We will use `DESeq2` for the rest of this practical.
+
+**First make sure we have all the objects and libraries loaded*
+
+```{r}
+library(DESeq2)
+
+```
+
+
+### Recap of pre-processing
+
+The previous section walked-through the pre-processing and transformation of the count data. Here, for completeness, we list the minimal steps required to process the data prior to differential expression analysis.
+
+Note that although we spent some time looking at the quality of our data , these steps are not required prior to performing differential expression so are not shown here. Remember, `DESeq2` [requires raw counts](http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#why-un-normalized-counts) so the `vst` transformation is not shown as part of this basic protocol.
+
+```{r eval=FALSE}
+raw <- read_tsv("raw_data/selected_prostate_tcga_raw.tsv")
+genes <- pull(raw,X)
+cts <- as.matrix(raw[,-1])
+rownames(cts) <- genes
+sampleinfo <- read.delim("meta_data/sampleInfo_corrected.txt")
+dds <- DESeqDataSetFromMatrix(countData = cts, 
+                                colData = sampleinfo,
+                                design = ~Status)
+```
+
+We also have the output of the pre-processing section saved as an R object if you didn't manage to complete these steps.
+
+```{r eval=FALSE}
+## Only run if you didn't complete the previous section on pre-processing
+load("Robjects/preprocessing.Rdata")
+```
+
+
+
+## Differential Expression with DESeq2
+
+We have previously defined the test condition using the `design` argument when we created the object. This can be checked using the `design` function.
+
+Typically we decide the design for the analysis when we create the DESeq2 objects, but it can be modified prior to the differential expression analysis
+
+```{r}
+colData(dds)
+design(dds)
+```
+
+
+
+The function runs a couple of processing steps automatically to adjust for different library size and gene-wise variabiliy, which you can read about in the [DESeq2 vignette](http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#the-deseq2-model).
+
+Firstly apply the median ratio normalisation method to compensate for differences in library sizes
+
+```{r eval=FALSE}
+dds <- estimateSizeFactors(dds)
+
+```
+
+estimate the dispersion for each gene
+
+```{r eval=FALSE}
+dds <- estimateDispersions(dds)
+```
+
+Apply statistical testing based on the negative binomial distribution.
+
+```{r eval=FALSE}
+dds <- nbinomWaldTest(dds)
+```
+
+Fortunately, there is one convenient function that will apply the three steps
+
+```{r}
+de_status <- DESeq(dds)
+
+```
+
+
+
+The results of the analysis can be obtained using the `results` function and displayed to the screen. Each row is a particular gene measured in the study (i.e. all genes in the organism being studied) and each column reports some aspect of the differential expression analysis for that gene. Note that all genes are reported. 
+
+```{r}
+results(de_status)
+```
+
+The output can be converted into a data frame and manipulated in the usual manner. It is recommended to use `dplyr` to manipulate the data frames with the standard set of operations detailed on the [dplyr cheatsheet](https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf)
+
+- `select` to pick which columns to display
+- `filter` to restrict the rows
+- `mutate` to add new variables to the data frame
+- `arrange` to order the data frame according to values of a column
+
+However, `dpylr` does not like data frame that have rownames. We can use the `rownames_to_column` function from the `tibble` package to add an extra column that contains the Ensembl gene IDs.
+
+The `%>%` symbol refers to the piping operation in R, which is a way of chaining operations together. 
+
+```{r}
+library(dplyr)
+library(tibble)
+results_status <- as.data.frame(results(de_status)) %>% 
+  rownames_to_column("GeneID")  
+
+results_status
+```
+
+We can sort the rows by adjusted p-value and then print the first 10 rows.
+
+```{r}
+arrange(results_status, padj) %>%  
+  head(n=10)
+```
+
+We can sort the rows and then write the resulting data frame to a file.
+
+```{r}
+arrange(results_status, padj) %>%
+  write.csv("tumour_vs_normal_DESeq_all.csv")
+```
+
+
+
+
+> ## Challenge 1 {.challenge}
+>
+> 1. Re-run the analysis to find differentially-expressed genes between the Gleason Grades 6 and 9
+> 2. Write a csv file that contains results for the genes that have a p-value less than 0.05 and a log2 fold change more than 1, or less than -1.
+> HINT: So that we don't overwrite our results so far, it may be convenient to create a new `DESeqDataSet` object for the new differential expression analysis.
+
+```{r eval=FALSE}
+dds_gleason <- dds
+design(dds_gleason) <- ......
+```
+
+### Changing the direction of the contrast
+
+In this initial analyis `DESeq2` has automatically decided which member of our sample groups to use as our baseline (`Normal` in this case) so that the log2 fold changes are reported with a positve value meaning higher expression in `Tumour`. If we want to change this behaviour we can change the `contrast` argument in the `results` function
+
+
+```{r eval=FALSE}
+## This should give the same as the table above
+results(de_status, contrast=c("Status","Tumour","Normal"))
+## Changing the direction of the contrast
+results(de_status, contrast=c("Status","Normal","Tumour"))
+
+```
+
+If we change to performing differential expression analysis on the `gleason_score` variable then there are various contrasts that can be made; `gleason 6` vs `Normal`, `Gleason 9` vs `Normal` etc. When the `results` function is run the table that is displayed is for the contrast `Normal vs G6`. The `resultsNames` function can tell us which other contrasts we can access.
+
+
+```{r}
+dds_gleason <- dds
+design(dds_gleason) <- ~gleason_score
+de_gleason <- DESeq(dds_gleason)
+resultsNames(de_gleason)
+results_gleason <- data.frame(results(de_gleason))
+```
+
+### Intersecting gene lists
+
+A venn diagram is a common way of visualising the overlap between two genelists. We need to create a data frame where each column indicates whether each gene is differentially expressed in a particular contrast or not. To create such columns we can do a logical test on the adjusted p-values from our results tables.
+
+
+```{r message=FALSE}
+venn_data <- data.frame(CellType = results_status$padj<0.05,
+                        Gleason = results_gleason$padj < 0.05)
+library(limma)
+vennDiagram(venn_data)
+```
+
+
+
+
+<!--
+### Fitting alternative models to the data
+
+`DESEq2` allows for more complicated models to be fit to the data. For guidance on how to fit more complicated models you can consult the [DESeq2 vignette](http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html), the [limma user guide](https://www.bioconductor.org/packages/devel/bioc/vignettes/limma/inst/doc/usersguide.pdf) or the Bioconductor mailing list. 
+
+In particular, DESeq2 allows [multi-factor models](http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#multi-factor-designs) which can account for other sources of variation in the data such as batches or gender.
+
+Lets suppose that we wanted the different between virgin and lactatin individuals, but controlling for `CellType`. The main assumption being that the effect of `Status` is the same regardless of `CellType` The design for such an analysis would be:-
+
+```{r}
+dds.mf <- dds
+design(dds.mf) <- ~CellType+Status
+de.mf <- DESeq(dds.mf)
+results.mf <- results(de.mf,contrast=c("Status","lactation","virgin"))
+results.mf
+```
+
+-->
+
+### Exporting normalized counts
+
+The `DESeq` workflow applies *median of ratios normalization* that accounts for differences in sequencing depth between samples. The user does not usually need to run this step. However, if you want a matrix of counts for some application outside of Bioconductor the values can be extracted from the `dds` object.
+
+```{r}
+dds <- estimateSizeFactors(dds) 
+countMatrix <-counts(dds, normalized=TRUE)
+head(countMatrix)
+write.csv(countMatrix,file="normalized_counts.csv")
+```
+
+
+```{r eval=FALSE}
+save(de_status,de_gleason, file="Robjects/DE.Rdata")
+```
+
