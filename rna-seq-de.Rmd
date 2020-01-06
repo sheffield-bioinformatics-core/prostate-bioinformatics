@@ -56,6 +56,8 @@ genes <- pull(raw,X)
 cts <- as.matrix(raw[,-1])
 rownames(cts) <- genes
 sampleinfo <- read.delim("meta_data/sampleInfo_corrected.txt")
+keep <- rowSums(assay(dds) >= 5) >= 5
+dds <- dds[keep,]
 dds <- DESeqDataSetFromMatrix(countData = cts, 
                                 colData = sampleinfo,
                                 design = ~Status)
@@ -65,7 +67,7 @@ We also have the output of the pre-processing section saved as an R object if yo
 
 ```{r eval=FALSE}
 ## Only run if you didn't complete the previous section on pre-processing
-load("Robjects/preprocessing.Rdata")
+dds <- readRDS("Robjects/dds.rds")
 ```
 
 
