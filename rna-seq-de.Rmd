@@ -61,6 +61,8 @@ dds <- dds[keep,]
 dds <- DESeqDataSetFromMatrix(countData = cts, 
                                 colData = sampleinfo,
                                 design = ~Status)
+dds <- dds[,-which(dds$ID %in% c("N7","N8","N9"))]
+dds
 ```
 
 We also have the output of the pre-processing section saved as an R object if you didn't manage to complete these steps.
@@ -115,9 +117,9 @@ de_status <- DESeq(dds)
 
 
 
-The results of the analysis can be obtained using the `results` function and displayed to the screen. Each row is a particular gene measured in the study (i.e. all genes in the organism being studied) and each column reports some aspect of the differential expression analysis for that gene. Note that all genes are reported. 
+The results of the analysis can be obtained using the `results` function and displayed to the screen. Each row is a particular gene measured in the study (i.e. all genes in the organism being studied) and each column reports some aspect of the differential expression analysis for that gene. Note that **all** genes are reported regardless of whether they are differentially-expressed or not. The results table is sorted according to the gene names rather than the test results.
 
-```{r}
+```{r eval=FALSE}
 results(de_status)
 ```
 
@@ -130,7 +132,6 @@ The output can be converted into a data frame and manipulated in the usual manne
 
 However, `dpylr` does not like data frame that have rownames. We can use the `rownames_to_column` function from the `tibble` package to add an extra column that contains the Ensembl gene IDs.
 
-The `%>%` symbol refers to the piping operation in R, which is a way of chaining operations together. 
 
 ```{r}
 library(dplyr)
@@ -138,7 +139,6 @@ library(tibble)
 results_status <- as.data.frame(results(de_status)) %>% 
   rownames_to_column("GeneID")  
 
-results_status
 ```
 
 We can sort the rows by adjusted p-value and then print the first 10 rows.
@@ -152,7 +152,7 @@ We can sort the rows and then write the resulting data frame to a file.
 
 ```{r}
 arrange(results_status, padj) %>%
-  write.csv("tumour_vs_normal_DESeq_all.csv")
+  write.csv("results/tumour_vs_normal_DESeq_all.csv")
 ```
 
 
@@ -161,7 +161,7 @@ arrange(results_status, padj) %>%
 > ## Challenge 1 {.challenge}
 >
 > 1. Re-run the analysis to find differentially-expressed genes between the Gleason Grades 6 and 9
-> 2. Write a csv file that contains results for the genes that have a p-value less than 0.05 and a log2 fold change more than 1, or less than -1.
+> 2. Write a csv file that contains just the results for the genes that have a p-value less than 0.05 and a log2 fold change more than 1, or less than -1.
 > HINT: So that we don't overwrite our results so far, it may be convenient to create a new `DESeqDataSet` object for the new differential expression analysis.
 
 ```{r eval=FALSE}
@@ -208,24 +208,23 @@ vennDiagram(venn_data)
 
 
 
-<!--
+
 ### Fitting alternative models to the data
 
 `DESEq2` allows for more complicated models to be fit to the data. For guidance on how to fit more complicated models you can consult the [DESeq2 vignette](http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html), the [limma user guide](https://www.bioconductor.org/packages/devel/bioc/vignettes/limma/inst/doc/usersguide.pdf) or the Bioconductor mailing list. 
 
 In particular, DESeq2 allows [multi-factor models](http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#multi-factor-designs) which can account for other sources of variation in the data such as batches or gender.
 
-Lets suppose that we wanted the different between virgin and lactatin individuals, but controlling for `CellType`. The main assumption being that the effect of `Status` is the same regardless of `CellType` The design for such an analysis would be:-
+Lets suppose that we wanted the different between virgin and lactatin individuals, but controlling for `Batch`. The main assumption being that the effect of `Status` is the same regardless of `Batch` The design for such an analysis would be:-
 
 ```{r}
-dds.mf <- dds
-design(dds.mf) <- ~CellType+Status
-de.mf <- DESeq(dds.mf)
-results.mf <- results(de.mf,contrast=c("Status","lactation","virgin"))
-results.mf
+dds_mf <- dds
+design(dds_mf) <- ~Batch+Status
+de_mf <- DESeq(dds.mf)
+results_mf <- results(de_mf,contrast=c("Status","Tumour","Normal"))
+
 ```
 
--->
 
 ### Exporting normalized counts
 
@@ -234,12 +233,13 @@ The `DESeq` workflow applies *median of ratios normalization* that accounts for 
 ```{r}
 dds <- estimateSizeFactors(dds) 
 countMatrix <-counts(dds, normalized=TRUE)
-head(countMatrix)
-write.csv(countMatrix,file="normalized_counts.csv")
+write.csv(countMatrix,file="processed_data/normalized_counts.csv")
 ```
 
+We can also save the DESeq2 results so that we don't have to repeat the analysis
 
-```{r eval=FALSE}
-save(de_status,de_gleason, file="Robjects/DE.Rdata")
+```{r}
+saveRDS(de_status, file="Robjects/de_status.rds")
+saveRDS(de_gleason, file="Robjects/de_gleason.rds")
 ```
 
