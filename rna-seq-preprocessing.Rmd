@@ -62,7 +62,7 @@ Although RNA-seq datasets generate large amounts of data, once the preliminary s
 
 The raw counts for this dataset can be found in the file `"selected_prostate_tcga_raw.tsv"`. It is a good idea to keep your analysis project organised, with the raw and processed data usually found in separate folders. In our case, the counts are found in the folder `raw_data`. When importing the data we have to specify a *path*. If in doubt, the function `file.exists` can be used to see if we have specified a valid path. At this stage we don't need to use any specialised packages to read the data into R, so `read_tsv` will do.  The data can be inspected using `head`
 
-```{r}
+```{r message=FALSE}
 library(tidyverse)
 file.exists("raw_data/selected_prostate_tcga_raw.tsv")
 raw <- read_tsv("raw_data/selected_prostate_tcga_raw.tsv")
@@ -134,12 +134,11 @@ colSums(assay(dds))
 
 > ## Challenge 1 {.challenge}
 >
-> 1. Produce a bar plot to show the Millions of reads for each sample
-> 2. Change the names under the plot so they are the "Name" of the sample rather than Run Name
-> 3. Add a horizontal line at 20 million reads
+>  Produce a bar plot to show the Millions of reads for each sample
+>  See below for an example
 
-> HINT: look at the help for the base graphics functions `barplot` and `abline` (or try and use `ggplot2` if you prefer)
 
+![](images/challenge1.png)
 
 
 ### Filtering non-expressed genes
@@ -163,13 +162,14 @@ sum(is_expressed[2,])
 In a similar manner to `colSums`, `rowSums` will give the sum of each row in a matrix and return the result as a `vector`.
 
 ```{r}
-hist(rowSums(is_expressed),main="Number of samples a gene is expressed in",xlab="Sample Count")
+df <- data.frame(Expressed = rowSums(is_expressed))
+ggplot(df, aes(x=Expressed)) + geom_bar()
 ```
 
 It seems that genes are either expressed in all samples, or not expressed at all. We will decide to keep genes that are expressed in at least 2 samples.
 
 ```{r}
-keep <- rowSums(assay(dds) >= 5) >= 2
+keep <- rowSums(assay(dds) >= 5) >= 5
 table(keep)
 dds <- dds[keep,]
 
@@ -178,6 +178,8 @@ dds <- dds[keep,]
 ### Visualising count distributions
 
 We typically use a `boxplot` to visualise difference the distributions of the columns of a numeric data frame. Applying the `boxplot` function to the raw counts from our dataset reveals something about the nature of the data; the distributions are dominated by a few genes with very large counts.
+
+N.B we will use the `boxplot` function from "base" R as it provides a more convenient way of quickly creating boxplots from a matrix of numeric values.
 
 ```{r}
 boxplot(assay(dds))
@@ -230,7 +232,7 @@ pheatmap(sampleDistMatrix,
 
 
 
-### Principal component (PCA) 
+### Principal component analysis (PCA) 
 
 Related to the distance matrix heatmap is the [(Principal Components Analysis) PCA](http://setosa.io/ev/principal-component-analysis/) plot, which shows the samples in the 2D plane spanned by their first two principal components. A principle components analysis is an example of an unsupervised analysis, where we don’t need to specify the groups. If your experiment is well controlled and has worked well, what we hope to see is that the greatest sources of variation in the data are the treatments/groups we are interested in. It is also an incredibly useful tool for quality control and checking for outliers
 
@@ -307,9 +309,9 @@ ggplot(plot_data, aes(x = PC1,y=PC2, col=Status,pch=gleason_score)) + geom_point
 
 > ## Challenge 4 {.challenge}
 >
-> Create a PCA plot labelled by Tumour / Normal status, but making the size of the points relative to library size
+> Create a PCA plot where the points are coloured by Gleason score, and making the size of the points relative to library size
 >
 >
 
-
+![](images/challenge4.png)
 
