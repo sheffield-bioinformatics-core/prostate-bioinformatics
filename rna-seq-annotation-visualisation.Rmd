@@ -2,7 +2,7 @@
 title: "RNA-seq Analysis in R"
 subtitle: "Annotation and Visualisation of RNA-seq results"
 author: "Mark Dunning"
-date: '`r format(Sys.time(), "Last modified: %d %b %Y")`'
+date: February 2020
 output:
   html_notebook:
     toc: yes
@@ -14,7 +14,8 @@ minutes: 300
 layout: page
 ---
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,warning=FALSE,fig.width=12)
+library(tidyverse)
 ```
 
 **Original Authors: Belinda Phipson, Anna Trigos, Matt Ritchie, Maria Doyle, Harriet Dashnow, Charity Law**, **Stephane Ballereau, Oscar Rueda, Ashley Sawle**
@@ -44,16 +45,17 @@ dds <- readRDS("Robjects/dds.rds")
 # Overview
 
 - Visualising DE results
+- Customising plots with ggplot2
+- Filtering and exporting tables with dplyr
 - Getting annotation
 - Retrieving gene models
-- Exporting browser traecks
-- Visualising results with respect to genomic location
+
 
 
 
 We can now have a list of genes ordered according to their evidence for being differentially-expressed.
 
-```{r}
+```{r message=FALSE}
 library(dplyr)
 library(tibble)
 
@@ -100,7 +102,27 @@ plotCounts(dds, "MIR4508",intgroup = c("Status"))
 ```
 
 
-However, it is hard to assess the biological significance of such a gene without more information about . To perform such a task we need to map between the identifiers we have in the `DESeq2` output and more familiar names.
+If we want greater control over how to visualise the data, we can use the `plotCounts` function to return the count data, but not actually produce the plot:-
+
+```{r}
+plotCounts(dds, "MIR4508",intgroup = c("Status"),returnData=TRUE)
+```
+
+
+> ## Challenge 1 {.challenge}
+>
+> 1. Use the option `returnData=TRUE` to get a data frame containing the counts of `MIR4508` in tumours or normals. Visualise these data using `ggplot2` (see plot A below). 
+> 2. Repeat the volcano plot from above, but use a different colour to indicate which genes are significant with an adjusted p-value less than 0.05. See plot B below
+> 3. (Optional) The argument `intgroup=` can be used to retrieve and plot data from multiple variables of interest in the data. Use the value `intgroup=c("Status","Batch")` and compare the counts between status and batches. See plot C below.
+
+```{r echo=FALSE}
+p1 <- plotCounts(dds, "MIR4508",intgroup = "Status",returnData = TRUE) %>%   ggplot(aes(x = Status, y = count,col=Status)) + geom_jitter(width=0.1) 
+p2 <- results_ordered %>% 
+  ggplot(aes(x = log2FoldChange, y = -log10(padj), col=padj < 0.05)) + geom_point()
+p3 <- plotCounts(dds, "MIR4508",intgroup = c("Status","Batch"),returnData = TRUE) %>%   ggplot(aes(x = Status, y = count,col=Status)) + geom_jitter(width=0.1) + facet_wrap(~Batch)
+
+cowplot::plot_grid(p1,p2,p3,labels=LETTERS[1:3])
+```
 
 
 ## Adding annotation to the DESeq2 results
@@ -214,7 +236,7 @@ write.csv(results_annotated,file="tumour_vs_normal_DESeq_annotated.csv",row.name
 
 
 
-We have already seen the use of a heatmap as a quality assessment tool to visualise the relationship between samples in an experiment. Another common use-case for such a plot is to visualise the results of a differential expression analysis....
+We have already seen the use of a heatmap as a quality assessment tool to visualise the relationship between samples in an experiment. Another common use-case for such a plot is to visualise the results of a differential expression analysis.
 
 Here we will take the top 10 genes from the differential expression analysis and produce a heatmap. The default colour palette goes from low expression in blue to high expression in red, which is a good alternative to the traditional red/green heatmaps which are not suitable for those with forms of colour-blindness.
 
@@ -248,50 +270,45 @@ pheatmap(assay(vsd)[top_genes,],
 ```
 
 
-> ## Challenge 1{.challenge}
+> ## Challenge 2{.challenge}
 > 1. Repeat the same heatmap as above, but for the top 75 most differentially-expressed genes in the contrast between Gleason grades 9 and 6
 > 2. Save the plot to a pdf file
 
-### Accessing the sample or gene clusters
+### Annotating plots with gene names
 
-The heatmap displays relationships between samples and genes in our study as a useful visualisation. In this example we can easily identify which samples are most similar based on their expression patterns. However, for larger dataset this may be more problematic. We can extract data the sample relationships about if we manually perform the clustering steps used by `pheatmap`. First is to cluster the samples with the default distance matrix and clustering algorithms. 
 
-```{r}
-mat <- assay(vsd)[top_genes,]
-## Calculate the distance matrix between samples
-d_samples <- dist(t(mat))
-
-plot(hclust(d_samples))
-rect.hclust(hclust(d_samples),k=2)
-```
-
-We can then "cut" the dendrogram to give a set number of clusters. Each sample has been assigned a label of `1` or `2` depending on which cluster it belongs to.
+Now that we have an annotated table of results, we can add the gene names to some of the other plots we have created. This should be straightforward as ggplot2 has a `label` aesthetic that can be mapped to columns in a data frame. The `geom_text` plot will then display the labels. However, the following plot is a bit crowded.
 
 ```{r}
-clusters <- cutree(hclust(d_samples),k = 2)
-clusters
-
+## Not a good idea to run this!!
+results_annotated %>% 
+  ggplot(aes(x = log2FoldChange, y = -log10(padj), label=GeneID)) + geom_point() + geom_text()
 ```
 
-The groupings could then be tabulated against with the sample metadata to see if particular biological groups are associated with the new clusters we have identified.
+
+The problem here is that ggplot2 is trying to label every point with a name; not quite what we want. The trick is to create a label that is blank for most genes and only labels the points we are interested in. The `ifelse` function in R is a convenient way to set the entries in a vector based on a *logical* expression. In this case, make the values in `Label` the same as the gene symbol if the gene is in our list of "top genes". Otherwise, points get labeled with a blank string `""`.
+
+For clarity, we also make the points slightly transparent and use a different colour for the text.
 
 ```{r}
-table(clusters, colData(dds)$Status)
-
+N <- 10
+top_genes <- results_annotated$ENSEMBL[1:N]
+results_annotated %>% 
+  mutate(Label = ifelse(ENSEMBL %in% top_genes, GeneID, "")) %>%  
+  ggplot(aes(x = log2FoldChange, y = -log10(padj), label=Label)) + geom_point(alpha=0.4) + geom_text(col="blue")
 ```
 
-A similar approach would also work for the genes. The key difference that we don't transpose before calculating the distance matrix. For the small number of genes in the heatmap such a distance matrix can be computed, but it may be computationally-expensive for a large number of genes.
+Finally, a slightly better positioning of text is given by the `ggrepel` package.
 
-```{r fig.height=6}
-d_genes <- dist(mat)
+```{r}
+if(!require(ggrepel)) install.packages("ggrepel")
 
-plot(hclust(d_genes))
-## Do clustering and split the samples into 2 groups
-rect.hclust(hclust(d_genes),k=2)
-cutree(hclust(d_genes),k = 2)
-
+N <- 10
+top_genes <- results_annotated$ENSEMBL[1:N]
+results_annotated %>% 
+  mutate(Label = ifelse(ENSEMBL %in% top_genes, GeneID, "")) %>%  
+  ggplot(aes(x = log2FoldChange, y = -log10(padj), label=Label)) + geom_point(alpha=0.4) + geom_text(col="blue")
 ```
-
 
 ### Annotation with the biomaRt resource
 
@@ -336,7 +353,7 @@ getBM(attributes = attributeNames,
       mart=ensembl)
 ```
 
-> ## Challenge 2{.challenge}
+> ## Challenge 3{.challenge}
 > 1. Use biomaRt to create an data frame containing the entrezgene, Ensembl ID and genomic coordinates (chromosome, start, end) for the Ensembl IDs in the DESeq2 results
 > 2. Remove duplicates entries from the new data frame
 > 3. Join the biomaRt annotation to the DESeq2 results to produce a data frame with differential expression results and annotation
