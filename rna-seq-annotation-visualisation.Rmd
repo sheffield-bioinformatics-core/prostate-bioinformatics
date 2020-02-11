@@ -231,6 +231,8 @@ results_annotated <- left_join(results_ordered, anno,by="GeneID")
 We can save the results table using the `write.csv` function, which writes the results out to a csv file that you can open in excel.
 
 ```{r}
+## create a directory for the results. don't give a warning if it already exists
+dir.create("results",showWarnings = FALSE)
 write.csv(results_annotated,file="tumour_vs_normal_DESeq_annotated.csv",row.names=FALSE)
 ```
 
