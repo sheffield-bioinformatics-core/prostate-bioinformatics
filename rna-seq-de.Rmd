@@ -220,7 +220,7 @@ Lets suppose that we wanted the different between virgin and lactatin individual
 ```{r}
 dds_mf <- dds
 design(dds_mf) <- ~Batch+Status
-de_mf <- DESeq(dds.mf)
+de_mf <- DESeq(dds_mf)
 results_mf <- results(de_mf,contrast=c("Status","Tumour","Normal"))
 
 ```
