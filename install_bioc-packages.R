@@ -1,0 +1,17 @@
+install.packages("BiocManager")
+BiocManager::install(c("limma", 
+                       "org.Hs.eg.db", 
+                       "RColorBrewer", 
+                       "TxDb.Hsapiens.UCSC.hg38.knownGene",
+                       "goseq",
+                       "fgsea",
+                       "DESeq2",
+                       "pheatmap",
+                       "rmarkdown",
+                       "tximport",
+                       "clusterProfiler",
+                       "DOSE",
+                       "pathview",
+                       "biomaRt",
+                       "dplyr",
+                       "ggplot2"),suppressUpdates=TRUE)
