@@ -1,0 +1,118 @@
+---
+title: "Annotation and Gene Set Walkthrough"
+author: "Mark Dunning"
+date: "20 February 2020"
+output: html_notebook
+---
+
+Load the data from the file
+
+```{r message=FALSE, warning=FALSE}
+library(DESeq2)
+library(dplyr)
+de_status <- readRDS("Robjects/de_status.rds")
+```
+
+Convert to a data frame and order by p-value
+
+```{r}
+results_ordered <- as.data.frame(results(de_status)) %>% 
+  tibble::rownames_to_column("SYMBOL") %>% 
+  arrange(padj)
+```
+
+Check the table...
+
+```{r}
+head(results_ordered)
+```
+
+Use the annotation package to get pathway IDs
+
+```{r}
+# to get names of keys
+# keytypes(org.Hs.eg.db)
+
+# to see what you can retrieve
+# columns(org.Hs.eg.db)
+library(org.Hs.eg.db)
+anno_GO <- AnnotationDbi::select(org.Hs.eg.db,
+                      keytype = "SYMBOL",
+                      keys = results_ordered$SYMBOL[1:10],
+                      columns = "GO")
+head(anno_GO)
+```
+
+How many times do we see particular ontology IDs?
+
+```{r}
+count(anno_GO,GO)
+```
+
+It seems that *GO:0000981* comes up a lot. Is this significant? We need to know how many genes belong to the pathway.
+
+```{r}
+pathway_genes <- AnnotationDbi::select(org.Hs.eg.db,
+                      keytype = "GO",
+                      keys="GO:0000981",
+                      columns = "SYMBOL") %>% 
+  filter(!duplicated(SYMBOL)) %>% 
+  pull(SYMBOL)
+
+length(pathway_genes)
+```
+
+To assess the significance we will add extra columns to the table; is each gene significant? does the gene belong to our pathway of interest?
+
+```{r}
+results_GO <- results_ordered %>% mutate(is_DE = padj < 0.05) %>% 
+  mutate(in_pathway = SYMBOL %in% pathway_genes)
+results_GO
+```
+
+A chi-squared test can be used to assess significance; this is the basis for gene-set testing
+
+```{r}
+chisq.test(table(pathway=results_GO$in_pathway, DE=results_GO$is_DE))
+
+```
+
+However, this is just for one pathway. To test *all* pathways there are various web tools we can use. The tools requires text files that we can create with R.
+
+*results/genes_for_GO.txt* is a file containing names of all DE genes.
+
+```{r}
+results_GO %>% 
+  filter(is_DE) %>% 
+  pull(SYMBOL) %>% 
+  write.table("results/genes_for_GO.txt",row.names = FALSE,quote=FALSE)
+```
+
+*genes_universe.txt* is all genes that we tested.
+
+```{r}
+results_GO %>% 
+  pull(SYMBOL) %>% 
+  write.table("results/gene_universe.txt",row.names=FALSE,quote=FALSE)
+```
+
+these two files can be uploaded to [GOrilla](http://cbl-gorilla.cs.technion.ac.il/) for example
+
+## GSEA
+
+An alternative to the gene-set testing approach above is GSEA first proposed by the Broad institute. In this method, we don't require a hard cut-off for significance. However, we have to order (`arrange`) our table by test statistic.
+
+A java application for GSEA is available [online](https://www.gsea-msigdb.org/gsea/downloads.jsp). The input for this tool is a file with two-columns; gene name and test statistic.
+
+The GSEA tool seems to require the input file to have the file extension `.rnk`. We also have to remove any `NA` values.
+
+
+```{r}
+
+results_ordered %>% 
+  filter(!duplicated(SYMBOL)) %>% 
+  filter(!is.na(stat)) %>% 
+  arrange(stat) %>% dplyr::select(SYMBOL, stat) %>% 
+  write.table("results/gsea_input.rnk",sep="\t",quote=FALSE,row.names=FALSE)
+
+```
